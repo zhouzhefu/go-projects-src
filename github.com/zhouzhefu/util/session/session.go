@@ -35,6 +35,8 @@ func (sm *SessionManager) Init() {
 * 
 * To be considered is the goroutine for session GC, but we may redesign the GC logic to limit the Lock is on 
 * a specific Session item (to be kept or to be GC). 
+* 
+* Now we have more thinking about this point, please read doc on IsExpired() method
 */
 func (sm *SessionManager) CreateOrUpdateSession(w http.ResponseWriter, r *http.Request) (*Session, error) {
 	sm.rwlock.Lock()
@@ -79,18 +81,21 @@ func (sm *SessionManager) GetSession(sessionId string) *Session {
 }
 
 func (sm *SessionManager) GC() {
+	fmt.Println("SessionManager GC()!")
 	discardedSessionIds := make([]string, 10)
 	for sessionId, session := range sm.store {
+		fmt.Println("try GC in sm:", session, sessionId, session.GC())
 		if session.GC() {
 			discardedSessionIds = append(discardedSessionIds, sessionId)
 		}
 	}
 
+	fmt.Println("Session to be removed:", discardedSessionIds)
 	for _, sessionId := range discardedSessionIds {
 		delete(sm.store, sessionId)
 	}
 
-	time.AfterFunc(time.Duration(60) * time.Second, sm.GC)
+	time.AfterFunc(time.Duration(5) * time.Second, sm.GC)
 }
 
 
@@ -106,19 +111,32 @@ func (ses *Session) Init() {
 	defer ses.rwlock.Unlock()
 
 	ses.Attributes = make(map[string]string)
-	ses.ExpireAt = time.Now().Add(time.Duration(30) * time.Second)
+	ses.ExpireAt = time.Now().Add(time.Duration(10) * time.Second)
 }
 
 func (ses *Session) Retouch() {
 	ses.rwlock.Lock()
 	defer ses.rwlock.Unlock()
 
-	ses.ExpireAt = time.Now().Add(time.Duration(30) * time.Second)
+	ses.ExpireAt = time.Now().Add(time.Duration(10) * time.Second)
 }
 
+/**
+* Here we have to remove the RLock() & RUnlock() pair from the method, quite a few points worth to say: 
+* 1. Unlike Java ReentrantReadWriteLock, RWMutex in Go is NOT reentrant. Therefore, you should never 
+*    allow a Lock pair contain another one. Two consecutive Locker.Lock()/RLock() will deadlock the 
+*    context goroutine. 
+* 2. "No reentrant" applies between Lock() and RLock(). Java allows Read lock to be contained by a Write 
+*    Lock, but in Go they are still exclusive to each other. 
+* 3. Even if you can handle concerns above, you should still avoid using RWMutex down to small units, they 
+*    are reusable and highly possible to be contained by other methods, which may also need to be protected 
+*    by Lock, worsely some of them are in if..else.. block, everywhere is the trap of deadlock in runtime. 
+* 4. Conclusion? Always try to avoid using session, if must, design it as small/lightweight as possible. As 
+*    we have seen to handle session the Lock is needed, it is the true killer of concurrent performance. 
+*/
 func (ses *Session) IsExpired() bool {
-	ses.rwlock.RLock()
-	defer ses.rwlock.RUnlock()
+	//ses.rwlock.RLock()
+	//defer ses.rwlock.RUnlock()
 
 	return time.Now().After(ses.ExpireAt)
 }
@@ -129,22 +147,18 @@ func (ses *Session) IsExpired() bool {
 * And thus was successfully GC. 
 */
 func (ses *Session) GC() bool {
-	ses.rwlock.RLock()
-	defer ses.rwlock.RUnlock()
+	ses.rwlock.Lock()
+	defer ses.rwlock.Unlock()
 
 	gcStatus := false
 
 	isExpired := ses.IsExpired()
 	if isExpired {
-		ses.rwlock.Lock()
-
 		if ses.Attributes != nil {
 			ses.Attributes = nil
 		} else {
 			gcStatus = true
 		}
-
-		ses.rwlock.Unlock()
 	}
 
 	return gcStatus

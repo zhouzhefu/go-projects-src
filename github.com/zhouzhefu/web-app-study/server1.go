@@ -36,6 +36,9 @@ func sayHallo(w http.ResponseWriter, r *http.Request) {
 func login(w http.ResponseWriter, r *http.Request) {
 	fmt.Println("client Method: ", r.Method)
 	if r.Method == "GET" { //GET means user just reach login panel
+		session, _ := glbSess.CreateOrUpdateSession(w, r)
+		fmt.Println("GET to retouch session:", session)
+
 		t, _ := template.ParseFiles("login.gtpl")
 		//t.Execute(w, nil)
 		t.Execute(w, withToken())
