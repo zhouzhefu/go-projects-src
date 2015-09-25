@@ -9,6 +9,10 @@ import (
 	"sync"
 )
 
+func init() {
+	fmt.Println("init(): This func will be executed when this package was imported for side-effects. ")
+}
+
 func genSessionId() string {
     b := make([]byte, 32)
     if _, err := rand.Read(b); err != nil {

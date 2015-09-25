@@ -12,7 +12,8 @@ import (
 	//"crypto/rand"
 	//"encoding/base64"
 	//"time"
-	"github.com/zhouzhefu/util/session"
+	. "github.com/zhouzhefu/util/session" // please note Go has 3 ways of import
+	_ "github.com/zhouzhefu/util/session" //Not a real import, just to execute the init() func of that package
 )
 
 /**
@@ -117,7 +118,7 @@ func upload(w http.ResponseWriter, r *http.Request) {
 }
 
 
-var glbSess session.SessionManager
+var glbSess *SessionManager
 func main() {
 	glbSess.Init()
 	go glbSess.GC()
