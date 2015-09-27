@@ -58,7 +58,6 @@ func (sm *SessionManager) CreateOrUpdateSession(w http.ResponseWriter, r *http.R
 	} else {
 		sessionId = cookie.Value
 	}
-fmt.Println("hit-1")
 	//re-create session if last session expire or not exists, otherwise Retouch() to keep session alive
 	session, exists := sm.store[sessionId]
 	if !exists || session.IsExpired() {
@@ -68,7 +67,6 @@ fmt.Println("hit-1")
 	} else {
 		session.Retouch()
 	}
-fmt.Println("hit-2")
 	return &session, nil
 }
 
