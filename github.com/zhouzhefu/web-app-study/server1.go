@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"html/template"
 	"strings"
-	//"md5"
 	"os"
 	"io"
 	//"crypto/rand"
@@ -21,6 +20,9 @@ import (
 	"code.google.com/p/go.net/websocket"
 
 	"net/rpc"
+
+	"crypto/md5"
+	"crypto/sha256"
 )
 
 /**
@@ -133,7 +135,44 @@ func main() {
 
 	// startWebSocketServer()
 
-	startRpcServer()
+	// startRpcServer()
+
+	startEncrptLoginServer()
+}
+
+func startEncrptLoginServer() {
+	http.HandleFunc("/login", encryptLogin)
+
+	err := http.ListenAndServe(":8989", nil)
+	if err != nil {
+		log.Fatal("ListenAndServe: ", err)
+	}
+}
+
+// submitted password will be hashed(one-way) to avoid storing plain-text password
+func encryptLogin(w http.ResponseWriter, r *http.Request) {
+	if r.Method == "GET" { //GET means user just reach login panel
+		t, _ := template.ParseFiles("login.gtpl")
+		//t.Execute(w, nil)
+		t.Execute(w, "dummyToken")
+	} else { //POST means user try to login
+		r.ParseForm()
+		username := r.FormValue("username")
+		plainPassword := r.FormValue("password")
+		fmt.Println("username: ", username)
+		fmt.Println("(plain)password: ", plainPassword)
+
+		hashMd5 := md5.New()
+		passwordMd5 := hashMd5.Sum([]byte(plainPassword))
+
+		hashSha256 := sha256.New()
+		io.WriteString(hashSha256, plainPassword)
+		passwordSha256 := hashSha256.Sum(nil)
+
+		fineEncryptedPassSHA256 := fmt.Sprintf("%x", passwordSha256)
+		fineEncryptedPassMD5 := fmt.Sprintf("%x", passwordMd5)
+		fmt.Println("MD5 Password:", fineEncryptedPassMD5, "SHA256 Password:", fineEncryptedPassSHA256)
+	}
 }
 
 func startRpcServer() {
