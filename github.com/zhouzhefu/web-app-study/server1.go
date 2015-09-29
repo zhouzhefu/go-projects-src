@@ -23,6 +23,8 @@ import (
 
 	"crypto/md5"
 	"crypto/sha256"
+
+	"errors"
 )
 
 /**
@@ -76,7 +78,7 @@ func login(w http.ResponseWriter, r *http.Request) {
 			fmt.Println("Current you have been login as:", currUsrName)
 		}
 
-		//output to page should be escaped in case of injection attack
+		//output to page should be escaped in case of injection/CRSF attack
 		template.HTMLEscape(w, []byte("Welcome " + currUsrName))
 	}
 
@@ -129,7 +131,7 @@ func upload(w http.ResponseWriter, r *http.Request) {
 var glbSess *SessionManager
 
 func main() {
-	//startSessionServer()
+	// startSessionServer()
 
 	// startTcpServer()
 
@@ -137,7 +139,99 @@ func main() {
 
 	// startRpcServer()
 
-	startEncrptLoginServer()
+	// startEncrptLoginServer()
+
+	// startErrorServer()
+	startDesignedErrorServer()
+}
+
+func startDesignedErrorServer() {
+	http.Handle("/errorCode", AppHandler(fineErrorView))
+
+	err := http.ListenAndServe(":8989", nil)
+	if err != nil {
+		log.Fatal("ListenAndServe: ", err)
+	}
+}
+
+type AppHandler func(w http.ResponseWriter, r *http.Request) *MyError
+func (fn AppHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// default rule to handle errors
+	if err := fn(w, r); err != nil {
+		http.Error(w, err.Error(), 500)
+	}
+}
+func fineErrorView(w http.ResponseWriter, r *http.Request) *MyError {
+	return &MyError{time.Now(), "This is from fineErrorView() error"}
+}
+
+func startErrorServer() {
+	http.HandleFunc("/error1", func(w http.ResponseWriter, r *http.Request) {
+		result, err := generateError1()
+		fmt.Println(result, err)
+
+		//throw 500 error to browser
+		http.Error(w, err.Error(), 500)
+	})
+	http.HandleFunc("/error2", func(w http.ResponseWriter, r *http.Request) {
+		_, err := generateError2()
+
+		// This "Type Assertion" equivalent to (as in Java): 
+		// myErr = (MyError) err;
+		// correct = err instanceof MyError;
+		if myErr, correct := err.(MyError); correct {
+			fmt.Println("It is really a MyError!", myErr)
+		} else {
+			fmt.Println("Sorry it is not that MyError. ", err)
+		}
+		
+	})
+	// Please carefully identify the subtle difference between /error2 & /error3. 
+	// BOTH pointer & value receiver of Error(), makes Go believe "error" interface has been implemented. 
+	http.HandleFunc("/error3", func(w http.ResponseWriter, r *http.Request) {
+		_, err := generateError3()
+
+		// This "Type Assertion" equivalent to (as in Java): 
+		// myErr = (*MyErrorP) err;
+		// correct = err instanceof *MyErrorP;
+		if myErr, correct := err.(*MyErrorP); correct {
+			fmt.Println("It is really a MyErrorP!", myErr)
+		} else {
+			fmt.Println("Sorry it is not that MyErrorP. ", err)
+		}
+		
+	})
+
+	err := http.ListenAndServe(":8989", nil)
+	if err != nil {
+		log.Fatal("ListenAndServe: ", err)
+	}
+}
+
+func generateError1() (string, error) {
+	return "error1 tested", errors.New("error1 here")
+}
+
+type MyError struct {
+	When time.Time
+	What string
+}
+func (me MyError) Error() string {
+	return me.What + "@" + me.When.String()
+}
+func generateError2() (string, error) {
+	return "", MyError{When: time.Now(), What: "MyError2 here"}
+}
+
+type MyErrorP struct {
+	When time.Time
+	What string
+}
+func (me *MyErrorP) Error() string {
+	return me.What + "@" + me.When.String()
+}
+func generateError3() (string, error) {
+	return "", &MyErrorP{When: time.Now(), What: "MyError3P here"}
 }
 
 func startEncrptLoginServer() {
